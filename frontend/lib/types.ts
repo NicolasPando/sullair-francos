@@ -27,10 +27,6 @@ export interface OpcionUsuario {
 
 export interface Opciones {
   setupPendiente: boolean;
-  sectores: Sector[];
-  tecnicos: OpcionTecnico[];
-  encargados: OpcionUsuario[];
-  admins: OpcionUsuario[];
 }
 
 export type TipoMovimiento = 'generado' | 'consumido' | 'guardia' | 'ajuste';

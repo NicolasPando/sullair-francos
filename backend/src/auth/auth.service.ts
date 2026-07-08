@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Tecnico } from '../tecnicos/tecnico.entity';
 import { Usuario } from '../usuarios/entities/usuario.entity';
 import { Sector } from '../entities/sector.entity';
@@ -33,30 +33,10 @@ export class AuthService {
     return admins === 0;
   }
 
-  // Opciones publicas para armar los selectores de login (sin passwords ni pinHash)
+  // Endpoint publico: NO devuelve listas de nombres ni de cuentas, solo si falta
+  // hacer la configuracion inicial. El login es siempre escribiendo el nombre a mano.
   async opciones() {
-    const [tecnicos, usuarios, sectores] = await Promise.all([
-      this.tecnicoRepository.find({ where: { activo: true } }),
-      this.usuarioRepository.find(),
-      this.sectorRepository.find(),
-    ]);
-
-    return {
-      setupPendiente: await this.setupPendiente(),
-      sectores: sectores.map((s) => ({ id: s.id, nombre: s.nombre })),
-      tecnicos: tecnicos.map((t) => ({
-        id: t.id,
-        nombre: t.nombre,
-        sector: t.sector?.nombre,
-        requierePin: !!t.pinHash,
-      })),
-      encargados: usuarios
-        .filter((u) => u.rol === RolesEnum.ENCARGADO)
-        .map((u) => ({ id: u.id, nombre: u.nombre, sector: u.sector?.nombre })),
-      admins: usuarios
-        .filter((u) => u.rol === RolesEnum.ADMIN)
-        .map((u) => ({ id: u.id, nombre: u.nombre })),
-    };
+    return { setupPendiente: await this.setupPendiente() };
   }
 
   async setup(setupDto: SetupDto) {
@@ -83,26 +63,36 @@ export class AuthService {
   }
 
   async loginTecnico(dto: LoginTecnicoDto) {
+    const nombre = dto.nombre.trim();
     const tecnico = await this.tecnicoRepository.findOne({
-      where: { id: dto.tecnicoId, activo: true },
+      where: { nombre: ILike(nombre), activo: true },
     });
-    if (!tecnico) throw new BadRequestException('Tecnico invalido');
+
+    // mensaje generico: no distinguimos "no existe" de "PIN incorrecto"
+    // para no permitir que alguien adivine que nombres estan cargados
+    const credencialesInvalidas = () => new UnauthorizedException('Nombre o PIN incorrectos');
+
+    if (!tecnico) throw credencialesInvalidas();
 
     if (tecnico.pinHash) {
-      if (!dto.pin) throw new BadRequestException('Este tecnico requiere PIN');
+      if (!dto.pin) throw credencialesInvalidas();
       const pinOk = await bcrypt.compare(dto.pin, tecnico.pinHash);
-      if (!pinOk) throw new UnauthorizedException('PIN incorrecto');
+      if (!pinOk) throw credencialesInvalidas();
     }
 
     return this.firmarToken(tecnico.id, RolesEnum.TECNICO, tecnico.nombre, tecnico.sector?.id);
   }
 
   async loginUsuario(dto: LoginUsuarioDto) {
-    const usuario = await this.usuarioRepository.findOne({ where: { id: dto.usuarioId } });
-    if (!usuario) throw new BadRequestException('Usuario invalido');
+    const nombre = dto.nombre.trim();
+    const usuario = await this.usuarioRepository.findOne({ where: { nombre: ILike(nombre) } });
+
+    const credencialesInvalidas = () => new UnauthorizedException('Nombre o contrasena incorrectos');
+
+    if (!usuario) throw credencialesInvalidas();
 
     const passwordOk = await bcrypt.compare(dto.password, usuario.passwordHash);
-    if (!passwordOk) throw new UnauthorizedException('Contrasena incorrecta');
+    if (!passwordOk) throw credencialesInvalidas();
 
     return this.firmarToken(usuario.id, usuario.rol, usuario.nombre, usuario.sector?.id ?? null);
   }

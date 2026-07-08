@@ -1,11 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class LoginUsuarioDto {
-  @ApiProperty({ description: 'id del encargado o admin elegido en el selector' })
-  @IsUUID()
+  @ApiProperty({ description: 'Nombre completo del encargado o admin, tal como fue cargado' })
+  @IsString()
   @IsNotEmpty()
-  usuarioId: string;
+  nombre: string;
 
   @ApiProperty()
   @IsString()

@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '@/lib/api';
 import { guardarSesion, rutaSegunRol } from '@/lib/session';
-import { Opciones } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 
 type Paso = 'cargando' | 'setup' | 'roles' | 'tecnico' | 'encargado' | 'admin';
@@ -13,18 +12,16 @@ export default function LoginPage() {
   const router = useRouter();
   const toast = useToast();
   const [paso, setPaso] = useState<Paso>('cargando');
-  const [opciones, setOpciones] = useState<Opciones | null>(null);
   const [cargandoAccion, setCargandoAccion] = useState(false);
 
   useEffect(() => {
-    cargarOpciones();
+    cargarEstado();
   }, []);
 
-  async function cargarOpciones() {
+  async function cargarEstado() {
     try {
-      const opc = await authApi.opciones();
-      setOpciones(opc);
-      setPaso(opc.setupPendiente ? 'setup' : 'roles');
+      const { setupPendiente } = await authApi.opciones();
+      setPaso(setupPendiente ? 'setup' : 'roles');
     } catch (err: any) {
       toast(`No se pudo conectar con el servidor: ${err.message}`, 'e');
     }
@@ -58,13 +55,13 @@ export default function LoginPage() {
   async function onLoginTecnico(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
-    const tecnicoId = (form.elements.namedItem('tecnicoId') as HTMLSelectElement).value;
-    const pin = (form.elements.namedItem('pin') as HTMLInputElement | null)?.value;
-    if (!tecnicoId) { toast('Elegí un técnico.', 'e'); return; }
+    const nombre = (form.elements.namedItem('nombre') as HTMLInputElement).value.trim();
+    const pin = (form.elements.namedItem('pin') as HTMLInputElement).value;
+    if (!nombre) { toast('Escribí tu nombre.', 'e'); return; }
 
     setCargandoAccion(true);
     try {
-      const { token, user } = await authApi.loginTecnico(tecnicoId, pin);
+      const { token, user } = await authApi.loginTecnico(nombre, pin || undefined);
       guardarSesion(token, user);
       irADashboard(user.rol);
     } catch (err: any) {
@@ -74,16 +71,16 @@ export default function LoginPage() {
     }
   }
 
-  async function onLoginUsuario(e: React.FormEvent<HTMLFormElement>, tipo: 'encargado' | 'admin') {
+  async function onLoginUsuario(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
-    const usuarioId = (form.elements.namedItem('usuarioId') as HTMLSelectElement).value;
+    const nombre = (form.elements.namedItem('nombre') as HTMLInputElement).value.trim();
     const password = (form.elements.namedItem('password') as HTMLInputElement).value;
-    if (!usuarioId) { toast(`Elegí un ${tipo === 'admin' ? 'administrador' : 'encargado'}.`, 'e'); return; }
+    if (!nombre) { toast('Escribí tu nombre.', 'e'); return; }
 
     setCargandoAccion(true);
     try {
-      const { token, user } = await authApi.loginUsuario(usuarioId, password);
+      const { token, user } = await authApi.loginUsuario(nombre, password);
       guardarSesion(token, user);
       irADashboard(user.rol);
     } catch (err: any) {
@@ -92,8 +89,6 @@ export default function LoginPage() {
       setCargandoAccion(false);
     }
   }
-
-  const tecnicoSeleccionado = (id: string) => opciones?.tecnicos.find((t) => t.id === id);
 
   return (
     <>
@@ -156,45 +151,57 @@ export default function LoginPage() {
           </div>
         )}
 
-        {paso === 'tecnico' && opciones && (
+        {paso === 'tecnico' && (
           <div className="card">
-            {opciones.tecnicos.length === 0 ? (
-              <div className="empty">No hay técnicos cargados todavía.</div>
-            ) : (
-              <FormularioTecnico opciones={opciones.tecnicos} onSubmit={onLoginTecnico} cargando={cargandoAccion} />
-            )}
+            <form onSubmit={onLoginTecnico}>
+              <div className="f">
+                <label>Tu nombre completo</label>
+                <input name="nombre" type="text" required autoFocus placeholder="Como te cargó el admin" />
+              </div>
+              <div className="f">
+                <label>PIN (si tenés uno cargado)</label>
+                <input name="pin" type="password" inputMode="numeric" maxLength={4} placeholder="Dejalo vacío si no tenés PIN" />
+              </div>
+              <button className="btn btn-pri" type="submit" disabled={cargandoAccion}>Ingresar</button>
+            </form>
             <div style={{ marginTop: 12 }}>
               <button className="lnk" onClick={() => setPaso('roles')}>← Volver</button>
             </div>
           </div>
         )}
 
-        {paso === 'encargado' && opciones && (
+        {paso === 'encargado' && (
           <div className="card">
-            <FormularioUsuario
-              opciones={opciones.encargados}
-              placeholder="encargado"
-              onSubmit={(e) => onLoginUsuario(e, 'encargado')}
-              cargando={cargandoAccion}
-            />
+            <form onSubmit={onLoginUsuario}>
+              <div className="f">
+                <label>Tu nombre completo</label>
+                <input name="nombre" type="text" required autoFocus />
+              </div>
+              <div className="f">
+                <label>Contraseña</label>
+                <input name="password" type="password" required />
+              </div>
+              <button className="btn btn-pri" type="submit" disabled={cargandoAccion}>Ingresar</button>
+            </form>
             <div style={{ marginTop: 12 }}>
               <button className="lnk" onClick={() => setPaso('roles')}>← Volver</button>
             </div>
           </div>
         )}
 
-        {paso === 'admin' && opciones && (
+        {paso === 'admin' && (
           <div className="card">
-            {opciones.admins.length === 0 ? (
-              <div className="empty">No hay administradores.</div>
-            ) : (
-              <FormularioUsuario
-                opciones={opciones.admins}
-                placeholder="administrador"
-                onSubmit={(e) => onLoginUsuario(e, 'admin')}
-                cargando={cargandoAccion}
-              />
-            )}
+            <form onSubmit={onLoginUsuario}>
+              <div className="f">
+                <label>Tu nombre completo</label>
+                <input name="nombre" type="text" required autoFocus />
+              </div>
+              <div className="f">
+                <label>Contraseña</label>
+                <input name="password" type="password" required />
+              </div>
+              <button className="btn btn-pri" type="submit" disabled={cargandoAccion}>Ingresar</button>
+            </form>
             <div style={{ marginTop: 12 }}>
               <button className="lnk" onClick={() => setPaso('roles')}>← Volver</button>
             </div>
@@ -203,76 +210,5 @@ export default function LoginPage() {
       </main>
       <p className="fn">Base de datos: PostgreSQL · API propia (NestJS)</p>
     </>
-  );
-}
-
-function FormularioTecnico({
-  opciones,
-  onSubmit,
-  cargando,
-}: {
-  opciones: Opciones['tecnicos'];
-  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
-  cargando: boolean;
-}) {
-  const [tecnicoId, setTecnicoId] = useState('');
-  const tecnico = opciones.find((t) => t.id === tecnicoId);
-
-  return (
-    <form onSubmit={onSubmit}>
-      <div className="f">
-        <label>Tu nombre</label>
-        <select
-          name="tecnicoId"
-          required
-          value={tecnicoId}
-          onChange={(e) => setTecnicoId(e.target.value)}
-        >
-          <option value="">Seleccionar…</option>
-          {opciones.map((t) => (
-            <option key={t.id} value={t.id}>{t.nombre} — {t.sector}</option>
-          ))}
-        </select>
-      </div>
-      {tecnico?.requierePin && (
-        <div className="f">
-          <label>PIN (4 dígitos)</label>
-          <input name="pin" type="password" inputMode="numeric" maxLength={4} required />
-        </div>
-      )}
-      <button className="btn btn-pri" type="submit" disabled={cargando}>Ingresar</button>
-    </form>
-  );
-}
-
-function FormularioUsuario({
-  opciones,
-  placeholder,
-  onSubmit,
-  cargando,
-}: {
-  opciones: { id: string; nombre: string }[];
-  placeholder: string;
-  onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
-  cargando: boolean;
-}) {
-  if (opciones.length === 0) return <div className="empty">No hay {placeholder}s cargados.</div>;
-  return (
-    <form onSubmit={onSubmit}>
-      <div className="f">
-        <label>{placeholder === 'administrador' ? 'Administrador' : 'Tu nombre'}</label>
-        <select name="usuarioId" required defaultValue="">
-          <option value="">Seleccionar…</option>
-          {opciones.map((o) => (
-            <option key={o.id} value={o.id}>{o.nombre}</option>
-          ))}
-        </select>
-      </div>
-      <div className="f">
-        <label>Contraseña</label>
-        <input name="password" type="password" required autoFocus />
-      </div>
-      <button className="btn btn-pri" type="submit" disabled={cargando}>Ingresar</button>
-    </form>
   );
 }

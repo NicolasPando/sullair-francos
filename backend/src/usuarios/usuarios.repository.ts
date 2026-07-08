@@ -27,6 +27,9 @@ export class UsuariosRepository {
       if (!sector) throw new NotFoundException('Sector no encontrado');
     }
 
+    const nombreExistente = await this.usuarioRepository.findOne({ where: { nombre: dto.nombre.trim() } });
+    if (nombreExistente) throw new ConflictException('Ya existe un usuario con ese nombre. Usa nombre y apellido para diferenciarlos.');
+
     const passwordHash = await bcrypt.hash(dto.password, 10);
     return this.usuarioRepository.save(
       this.usuarioRepository.create({ nombre: dto.nombre, rol: dto.rol, sector, passwordHash }),

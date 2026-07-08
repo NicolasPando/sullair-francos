@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -27,6 +27,9 @@ export class TecnicosRepository {
   async create(dto: CreateTecnicoDto) {
     const sector = await this.sectorRepository.findOne({ where: { id: dto.sectorId } });
     if (!sector) throw new NotFoundException('Sector no encontrado');
+
+    const nombreExistente = await this.tecnicoRepository.findOne({ where: { nombre: dto.nombre.trim() } });
+    if (nombreExistente) throw new ConflictException('Ya existe un tecnico con ese nombre. Usa nombre y apellido para diferenciarlos.');
 
     const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : null;
 

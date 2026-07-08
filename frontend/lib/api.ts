@@ -43,15 +43,15 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ nombre, password }),
     }),
-  loginTecnico: (tecnicoId: string, pin?: string) =>
+  loginTecnico: (nombre: string, pin?: string) =>
     apiFetch<{ token: string; user: any }>('/auth/login/tecnico', {
       method: 'POST',
-      body: JSON.stringify({ tecnicoId, pin }),
+      body: JSON.stringify({ nombre, pin }),
     }),
-  loginUsuario: (usuarioId: string, password: string) =>
+  loginUsuario: (nombre: string, password: string) =>
     apiFetch<{ token: string; user: any }>('/auth/login/usuario', {
       method: 'POST',
-      body: JSON.stringify({ usuarioId, password }),
+      body: JSON.stringify({ nombre, password }),
     }),
 };
 

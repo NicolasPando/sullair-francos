@@ -7,7 +7,7 @@ export class Tecnico {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ unique: true })
   nombre: string;
 
   @ManyToOne(() => Sector, (sector) => sector.tecnicos, { eager: true })

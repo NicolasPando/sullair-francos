@@ -8,7 +8,7 @@ export class Usuario {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ unique: true })
   nombre: string;
 
   @Column({ type: 'enum', enum: RolesEnum })
