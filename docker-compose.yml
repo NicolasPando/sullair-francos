@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgresdb:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sullair_francos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - sullair_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgresdb:
+        condition: service_healthy
+    environment:
+      DB_database: sullair_francos
+      DB_host: postgresdb
+      DB_port: 5432
+      DB_username: postgres
+      DB_password: postgres
+      DB_ssl: 'false'
+      JWT_SECRET: cambiame-por-un-secreto-largo
+      APP_port: 3000
+    ports:
+      - '3000:3000'
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3000
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '3001:3000'
+
+volumes:
+  sullair_db_data:
