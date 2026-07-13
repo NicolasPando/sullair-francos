@@ -3,3 +3,5 @@ const nextConfig = {
   reactStrictMode: true,
 };
 module.exports = nextConfig;
+
+JSON;
