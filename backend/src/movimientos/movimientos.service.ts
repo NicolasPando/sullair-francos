@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { MovimientosRepository } from './movimientos.repository';
+import { TecnicosRepository } from '../tecnicos/tecnicos.repository';
 import { DeclararGeneradoDto } from './dto/declarar-generado.dto';
 import { SolicitarConsumidoDto } from './dto/solicitar-consumido.dto';
 import { RegistrarGuardiaDto } from './dto/registrar-guardia.dto';
@@ -10,7 +11,10 @@ import { RolesEnum } from '../usuarios/entities/roles.enum';
 
 @Injectable()
 export class MovimientosService {
-  constructor(private readonly movimientosRepository: MovimientosRepository) {}
+  constructor(
+    private readonly movimientosRepository: MovimientosRepository,
+    private readonly tecnicosRepository: TecnicosRepository,
+  ) {}
 
   declararGenerado(user: JwtPayload, dto: DeclararGeneradoDto) {
     return this.movimientosRepository.declararGenerado(user.sub, dto);
@@ -24,7 +28,14 @@ export class MovimientosService {
     return this.movimientosRepository.registrarGuardia(user.sub, dto);
   }
 
-  ajuste(user: JwtPayload, dto: AjusteDto) {
+  // Admin puede ajustar a cualquier tecnico. Encargado solo a tecnicos de su propio sector.
+  async ajuste(user: JwtPayload, dto: AjusteDto) {
+    if (user.rol === RolesEnum.ENCARGADO) {
+      const tecnico = await this.tecnicosRepository.findOne(dto.tecnicoId);
+      if (tecnico.sector?.id !== user.sectorId) {
+        throw new ForbiddenException('Solo podes ajustar el saldo de tecnicos de tu sector');
+      }
+    }
     return this.movimientosRepository.ajuste(dto, user.nombre);
   }
 
@@ -38,6 +49,13 @@ export class MovimientosService {
       throw new ForbiddenException('No podes ver el saldo de otro tecnico');
     }
     return { tecnicoId, saldo: await this.movimientosRepository.saldo(tecnicoId) };
+  }
+
+  // Listado con saldo calculado para cada tecnico. Un encargado siempre queda
+  // restringido a su propio sector, sin importar que sectorId le pidan.
+  saldosPorSector(user: JwtPayload, sectorId?: string) {
+    const sectorEfectivo = user.rol === RolesEnum.ENCARGADO ? user.sectorId : sectorId;
+    return this.movimientosRepository.saldosPorSector(sectorEfectivo);
   }
 
   movimientosDeMiSector(user: JwtPayload, estado?: EstadoMovimiento) {
@@ -57,7 +75,8 @@ export class MovimientosService {
     const movimientos = await this.movimientosRepository.findAll();
     const headers = [
       'id', 'tecnico', 'sector', 'tipo', 'cantidad', 'fecha_trabajo', 'dia_trabajado',
-      'fecha_deseada', 'turno', 'guardia_desde', 'guardia_hasta', 'guardia_novedades',
+      'fecha_deseada', 'turno', 'fechas_solicitadas', 'guardia_desde', 'guardia_hasta',
+      'guardia_dias', 'guardia_novedades',
       'estado', 'creado_en', 'resuelto_por', 'resuelto_en', 'motivo_rechazo', 'motivo_ajuste', 'comentario',
     ];
 
@@ -70,7 +89,8 @@ export class MovimientosService {
     const rows = movimientos.map((m) =>
       [
         m.id, m.tecnico?.nombre, m.tecnico?.sector?.nombre, m.tipo, m.cantidad, m.fechaTrabajo,
-        m.diaTrabajado, m.fechaDeseada, m.turno, m.guardiaDesde, m.guardiaHasta, m.guardiaNovedades,
+        m.diaTrabajado, m.fechaDeseada, m.turno, m.fechasSolicitadas ? JSON.stringify(m.fechasSolicitadas) : '',
+        m.guardiaDesde, m.guardiaHasta, m.guardiaDias ? JSON.stringify(m.guardiaDias) : '', m.guardiaNovedades,
         m.estado, m.creadoEn?.toISOString(), m.resueltoPor, m.resueltoEn?.toISOString(),
         m.motivoRechazo, m.motivoAjuste, m.comentario,
       ]

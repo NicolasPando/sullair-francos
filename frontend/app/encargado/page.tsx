@@ -3,19 +3,29 @@
 import { useEffect, useState } from 'react';
 import { useSesion } from '@/lib/useSesion';
 import { movimientosApi } from '@/lib/api';
-import { Movimiento } from '@/lib/types';
+import { Movimiento, SaldoTecnico } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 import SessionHeader from '@/components/SessionHeader';
 import MovimientoCard from '@/components/MovimientoCard';
+import Calendar from '@/components/Calendar';
+import AjusteModal from '@/components/AjusteModal';
+
+type Tab = 'pendientes' | 'tecnicos' | 'historial';
+type TabHistorial = 'lista' | 'calendario';
 
 export default function EncargadoPage() {
   const { usuario, listo, salir } = useSesion('encargado');
   const toast = useToast();
-  const [tab, setTab] = useState<'pendientes' | 'historial'>('pendientes');
-  const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
+  const [tab, setTab] = useState<Tab>('pendientes');
+  const [subTabHistorial, setSubTabHistorial] = useState<TabHistorial>('lista');
+
+  const [pendientes, setPendientes] = useState<Movimiento[]>([]);
+  const [historial, setHistorial] = useState<Movimiento[]>([]);
+  const [tecnicos, setTecnicos] = useState<SaldoTecnico[]>([]);
   const [cargando, setCargando] = useState(true);
   const [rechazando, setRechazando] = useState<string | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
+  const [ajustando, setAjustando] = useState<SaldoTecnico | null>(null);
 
   useEffect(() => {
     if (listo) cargar();
@@ -24,8 +34,14 @@ export default function EncargadoPage() {
   async function cargar() {
     setCargando(true);
     try {
-      const data = await movimientosApi.deMiSector(tab === 'pendientes' ? 'pendiente' : undefined);
-      setMovimientos(tab === 'pendientes' ? data : data.filter((m) => m.estado !== 'pendiente'));
+      if (tab === 'pendientes') {
+        setPendientes(await movimientosApi.deMiSector('pendiente'));
+      } else if (tab === 'tecnicos') {
+        setTecnicos(await movimientosApi.saldos());
+      } else {
+        const data = await movimientosApi.deMiSector();
+        setHistorial(data.filter((m) => m.estado !== 'pendiente'));
+      }
     } catch (err: any) {
       toast(err.message, 'e');
     } finally {
@@ -69,21 +85,22 @@ export default function EncargadoPage() {
       <main className="sp">
         <div className="tabs">
           <button className={`tab ${tab === 'pendientes' ? 'on' : ''}`} onClick={() => setTab('pendientes')}>Pendientes</button>
+          <button className={`tab ${tab === 'tecnicos' ? 'on' : ''}`} onClick={() => setTab('tecnicos')}>Técnicos</button>
           <button className={`tab ${tab === 'historial' ? 'on' : ''}`} onClick={() => setTab('historial')}>Historial</button>
         </div>
 
         {cargando ? (
           <div className="lw"><div className="spinr" /></div>
-        ) : movimientos.length === 0 ? (
-          <div className="empty">{tab === 'pendientes' ? 'No hay movimientos pendientes en tu sector.' : 'Sin movimientos resueltos todavía.'}</div>
-        ) : (
-          movimientos.map((m) => (
-            <MovimientoCard
-              key={m.id}
-              movimiento={m}
-              mostrarTecnico
-              acciones={
-                tab === 'pendientes' ? (
+        ) : tab === 'pendientes' ? (
+          pendientes.length === 0 ? (
+            <div className="empty">No hay movimientos pendientes en tu sector.</div>
+          ) : (
+            pendientes.map((m) => (
+              <MovimientoCard
+                key={m.id}
+                movimiento={m}
+                mostrarTecnico
+                acciones={
                   rechazando === m.id ? (
                     <RechazoInline
                       onCancelar={() => setRechazando(null)}
@@ -96,12 +113,54 @@ export default function EncargadoPage() {
                       <button className="btn btn-danger btn-sm" disabled={procesando === m.id} onClick={() => setRechazando(m.id)}>Rechazar</button>
                     </div>
                   )
-                ) : undefined
-              }
-            />
-          ))
+                }
+              />
+            ))
+          )
+        ) : tab === 'tecnicos' ? (
+          tecnicos.length === 0 ? (
+            <div className="empty">No hay técnicos en tu sector todavía.</div>
+          ) : (
+            tecnicos.map((t) => (
+              <div className="mv" key={t.tecnicoId}>
+                <div className="mv-top">
+                  <div>
+                    <div className="mv-tipo">{t.nombre}</div>
+                    <div className="mv-tec">{t.activo ? 'Activo' : 'Inactivo'}</div>
+                  </div>
+                  <div className={`mv-cant`}>{t.saldo}</div>
+                </div>
+                <div className="mv-acts">
+                  <button className="btn btn-sec btn-sm" onClick={() => setAjustando(t)}>Ajuste de saldo</button>
+                </div>
+              </div>
+            ))
+          )
+        ) : (
+          <>
+            <div className="cal-sub">
+              <button className={`cal-sub-btn ${subTabHistorial === 'lista' ? 'on' : ''}`} onClick={() => setSubTabHistorial('lista')}>Lista</button>
+              <button className={`cal-sub-btn ${subTabHistorial === 'calendario' ? 'on' : ''}`} onClick={() => setSubTabHistorial('calendario')}>Calendario</button>
+            </div>
+            {subTabHistorial === 'calendario' ? (
+              <Calendar movimientos={historial} />
+            ) : historial.length === 0 ? (
+              <div className="empty">Sin movimientos resueltos todavía.</div>
+            ) : (
+              historial.map((m) => <MovimientoCard key={m.id} movimiento={m} mostrarTecnico />)
+            )}
+          </>
         )}
       </main>
+
+      {ajustando && (
+        <AjusteModal
+          tecnicoId={ajustando.tecnicoId}
+          tecnicoNombre={ajustando.nombre}
+          onClose={() => setAjustando(null)}
+          onListo={() => { setAjustando(null); cargar(); }}
+        />
+      )}
     </>
   );
 }

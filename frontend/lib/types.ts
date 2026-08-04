@@ -12,25 +12,14 @@ export interface Sector {
   nombre: string;
 }
 
-export interface OpcionTecnico {
-  id: string;
-  nombre: string;
-  sector: string;
-  requierePin: boolean;
-}
-
-export interface OpcionUsuario {
-  id: string;
-  nombre: string;
-  sector?: string;
-}
-
 export interface Opciones {
   setupPendiente: boolean;
 }
 
 export type TipoMovimiento = 'generado' | 'consumido' | 'guardia' | 'ajuste';
 export type EstadoMovimiento = 'pendiente' | 'aprobado' | 'rechazado';
+export type Turno = 'man' | 'tar';
+export type DiaTrabajado = 'sabado' | 'domingo';
 
 export interface Tecnico {
   id: string;
@@ -47,17 +36,40 @@ export interface Usuario {
   sector: Sector | null;
 }
 
+export interface SaldoTecnico {
+  tecnicoId: string;
+  nombre: string;
+  sector: string | null;
+  activo: boolean;
+  saldo: number;
+}
+
+export interface FechaSolicitada {
+  fecha: string;
+  esMedio: boolean;
+  turno: Turno | null;
+}
+
+export interface DiaGuardia {
+  fecha: string;
+  convocado: boolean;
+  inicio: string | null;
+  fin: string | null;
+}
+
 export interface Movimiento {
   id: string;
   tecnico: Tecnico;
   tipo: TipoMovimiento;
   cantidad: number;
   fechaTrabajo: string | null;
-  diaTrabajado: string | null;
+  diaTrabajado: DiaTrabajado | null;
   fechaDeseada: string | null;
-  turno: string | null;
+  turno: Turno | null;
+  fechasSolicitadas: FechaSolicitada[] | null;
   guardiaDesde: string | null;
   guardiaHasta: string | null;
+  guardiaDias: DiaGuardia[] | null;
   guardiaNovedades: string | null;
   motivoAjuste: string | null;
   estado: EstadoMovimiento;

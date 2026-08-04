@@ -3,29 +3,35 @@
 import { useEffect, useState } from 'react';
 import { useSesion } from '@/lib/useSesion';
 import { movimientosApi, sectoresApi, tecnicosApi, usuariosApi } from '@/lib/api';
-import { Movimiento, Sector, Tecnico, Usuario } from '@/lib/types';
+import { Movimiento, Sector, SaldoTecnico, Tecnico, Usuario } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 import SessionHeader from '@/components/SessionHeader';
 import MovimientoCard from '@/components/MovimientoCard';
 import Modal from '@/components/Modal';
+import Calendar from '@/components/Calendar';
+import AjusteModal from '@/components/AjusteModal';
 
 type Tab = 'resumen' | 'movimientos' | 'tecnicos' | 'sectores' | 'usuarios';
+type TabHistorial = 'lista' | 'calendario';
 
 export default function AdminPage() {
   const { usuario, listo, salir } = useSesion('admin');
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('resumen');
+  const [subTabHistorial, setSubTabHistorial] = useState<TabHistorial>('lista');
 
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
+  const [saldos, setSaldos] = useState<SaldoTecnico[]>([]);
   const [sectores, setSectores] = useState<Sector[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [cargando, setCargando] = useState(true);
 
   const [modalTecnico, setModalTecnico] = useState<null | 'nuevo'>(null);
+  const [editandoTecnico, setEditandoTecnico] = useState<Tecnico | null>(null);
   const [modalSector, setModalSector] = useState(false);
   const [modalUsuario, setModalUsuario] = useState<null | 'encargado' | 'admin'>(null);
-  const [modalAjuste, setModalAjuste] = useState<Tecnico | null>(null);
+  const [ajustando, setAjustando] = useState<{ id: string; nombre: string } | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
@@ -35,14 +41,16 @@ export default function AdminPage() {
   async function cargarTodo() {
     setCargando(true);
     try {
-      const [mov, tec, sec, usr] = await Promise.all([
+      const [mov, tec, sal, sec, usr] = await Promise.all([
         movimientosApi.todos(),
         tecnicosApi.listar(),
+        movimientosApi.saldos(),
         sectoresApi.listar(),
         usuariosApi.listar(),
       ]);
       setMovimientos(mov);
       setTecnicos(tec);
+      setSaldos(sal);
       setSectores(sec);
       setUsuarios(usr);
     } catch (err: any) {
@@ -52,8 +60,11 @@ export default function AdminPage() {
     }
   }
 
+  const saldoDe = (tecnicoId: string) => saldos.find((s) => s.tecnicoId === tecnicoId)?.saldo ?? 0;
   const pendientes = movimientos.filter((m) => m.estado === 'pendiente').length;
   const aprobados = movimientos.filter((m) => m.estado === 'aprobado').length;
+  const tecnicosActivos = tecnicos.filter((t) => t.activo).length;
+  const conSaldoNegativo = saldos.filter((s) => s.activo && s.saldo < 0).length;
 
   if (!listo || !usuario) return null;
 
@@ -76,11 +87,16 @@ export default function AdminPage() {
             {tab === 'resumen' && (
               <>
                 <div className="sg">
-                  <div className="sb"><div className="n">{tecnicos.length}</div><div className="l">Técnicos</div></div>
+                  <div className="sb"><div className="n">{tecnicosActivos}</div><div className="l">Técnicos activos</div></div>
                   <div className="sb"><div className="n">{sectores.length}</div><div className="l">Sectores</div></div>
                   <div className="sb"><div className="n">{pendientes}</div><div className="l">Pendientes</div></div>
                   <div className="sb"><div className="n">{aprobados}</div><div className="l">Aprobados</div></div>
                 </div>
+                {conSaldoNegativo > 0 && (
+                  <div className="al al-warn">
+                    {conSaldoNegativo} técnico{conSaldoNegativo > 1 ? 's tienen' : ' tiene'} saldo negativo.
+                  </div>
+                )}
                 <a className="btn btn-sec" href={movimientosApi.exportCsvUrl()} target="_blank" rel="noreferrer"
                    onClick={(e) => { e.preventDefault(); descargarCsv(); }}>
                   Exportar movimientos a CSV
@@ -89,9 +105,19 @@ export default function AdminPage() {
             )}
 
             {tab === 'movimientos' && (
-              movimientos.length === 0
-                ? <div className="empty">Todavía no hay movimientos cargados.</div>
-                : movimientos.map((m) => <MovimientoCard key={m.id} movimiento={m} mostrarTecnico />)
+              <>
+                <div className="cal-sub">
+                  <button className={`cal-sub-btn ${subTabHistorial === 'lista' ? 'on' : ''}`} onClick={() => setSubTabHistorial('lista')}>Lista</button>
+                  <button className={`cal-sub-btn ${subTabHistorial === 'calendario' ? 'on' : ''}`} onClick={() => setSubTabHistorial('calendario')}>Calendario</button>
+                </div>
+                {subTabHistorial === 'calendario' ? (
+                  <Calendar movimientos={movimientos} />
+                ) : movimientos.length === 0 ? (
+                  <div className="empty">Todavía no hay movimientos cargados.</div>
+                ) : (
+                  movimientos.map((m) => <MovimientoCard key={m.id} movimiento={m} mostrarTecnico />)
+                )}
+              </>
             )}
 
             {tab === 'tecnicos' && (
@@ -104,12 +130,13 @@ export default function AdminPage() {
                     <div className="mv-top">
                       <div>
                         <div className="mv-tipo">{t.nombre}</div>
-                        <div className="mv-tec">{t.sector?.nombre}</div>
+                        <div className="mv-tec">{t.sector?.nombre} · Saldo: {saldoDe(t.id)}</div>
                       </div>
                       <span className={`badge ${t.activo ? 'ba' : 'br'}`}>{t.activo ? 'activo' : 'inactivo'}</span>
                     </div>
                     <div className="mv-acts">
-                      <button className="btn btn-sec btn-sm" onClick={() => setModalAjuste(t)}>Ajustar saldo</button>
+                      <button className="btn btn-sec btn-sm" onClick={() => setEditandoTecnico(t)}>Editar</button>
+                      <button className="btn btn-sec btn-sm" onClick={() => setAjustando({ id: t.id, nombre: t.nombre })}>Ajustar saldo</button>
                       <button
                         className={`btn btn-sm ${t.activo ? 'btn-danger' : 'btn-ok'}`}
                         onClick={async () => {
@@ -212,9 +239,47 @@ export default function AdminPage() {
             <div className="f">
               <label>PIN (opcional, 4 dígitos)</label>
               <input name="pin" maxLength={4} inputMode="numeric" />
-              <div className="hint">Si lo dejás vacío, el técnico entra solo eligiendo su nombre.</div>
+              <div className="hint">Si lo dejás vacío, el técnico entra con solo escribir su nombre.</div>
             </div>
             <button className="btn btn-pri" type="submit" disabled={enviando}>Crear</button>
+          </form>
+        </Modal>
+      )}
+
+      {editandoTecnico && (
+        <Modal titulo={`Editar — ${editandoTecnico.nombre}`} onClose={() => setEditandoTecnico(null)}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget);
+            setEnviando(true);
+            try {
+              const pin = String(f.get('pin') || '');
+              await tecnicosApi.actualizar(editandoTecnico.id, {
+                nombre: String(f.get('nombre')),
+                sectorId: String(f.get('sectorId')),
+                ...(pin ? { pin } : {}),
+              });
+              toast('Técnico actualizado.', 's');
+              setEditandoTecnico(null);
+              cargarTodo();
+            } catch (err: any) { toast(err.message, 'e'); }
+            finally { setEnviando(false); }
+          }}>
+            <div className="f">
+              <label>Nombre completo</label>
+              <input name="nombre" required defaultValue={editandoTecnico.nombre} />
+            </div>
+            <div className="f">
+              <label>Sector</label>
+              <select name="sectorId" required defaultValue={editandoTecnico.sector?.id}>
+                {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>
+            <div className="f">
+              <label>Nuevo PIN (opcional)</label>
+              <input name="pin" maxLength={4} inputMode="numeric" placeholder="Dejar vacío para no cambiarlo" />
+            </div>
+            <button className="btn btn-pri" type="submit" disabled={enviando}>Guardar cambios</button>
           </form>
         </Modal>
       )}
@@ -283,35 +348,13 @@ export default function AdminPage() {
         </Modal>
       )}
 
-      {modalAjuste && (
-        <Modal titulo={`Ajustar saldo — ${modalAjuste.nombre}`} onClose={() => setModalAjuste(null)}>
-          <form onSubmit={async (e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            setEnviando(true);
-            try {
-              await movimientosApi.ajuste({
-                tecnicoId: modalAjuste.id,
-                cantidad: Number(f.get('cantidad')),
-                motivoAjuste: String(f.get('motivoAjuste')),
-              });
-              toast('Ajuste aplicado.', 's');
-              setModalAjuste(null);
-              cargarTodo();
-            } catch (err: any) { toast(err.message, 'e'); }
-            finally { setEnviando(false); }
-          }}>
-            <div className="f">
-              <label>Cantidad (positiva suma, negativa resta)</label>
-              <input name="cantidad" type="number" step="0.5" required />
-            </div>
-            <div className="f">
-              <label>Motivo</label>
-              <textarea name="motivoAjuste" rows={2} required />
-            </div>
-            <button className="btn btn-pri" type="submit" disabled={enviando}>Aplicar ajuste</button>
-          </form>
-        </Modal>
+      {ajustando && (
+        <AjusteModal
+          tecnicoId={ajustando.id}
+          tecnicoNombre={ajustando.nombre}
+          onClose={() => setAjustando(null)}
+          onListo={() => { setAjustando(null); cargarTodo(); }}
+        />
       )}
     </>
   );

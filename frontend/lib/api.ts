@@ -1,7 +1,10 @@
 import { obtenerToken } from './session';
 import {
+  DiaGuardia,
+  FechaSolicitada,
   Movimiento,
   Opciones,
+  SaldoTecnico,
   Sector,
   Tecnico,
   Usuario,
@@ -80,16 +83,17 @@ export const usuariosApi = {
 };
 
 export const movimientosApi = {
-  declararGenerado: (data: { fechaTrabajo: string; diaTrabajado?: string; comentario?: string }) =>
+  declararGenerado: (data: { fechaTrabajo: string; comentario?: string }) =>
     apiFetch<Movimiento>('/movimientos/generado', { method: 'POST', body: JSON.stringify(data) }),
-  solicitarConsumido: (data: { fechaDeseada: string; turno?: string; comentario?: string }) =>
+  solicitarConsumido: (data: { cantidad: number; fechas: FechaSolicitada[]; comentario?: string }) =>
     apiFetch<Movimiento>('/movimientos/consumido', { method: 'POST', body: JSON.stringify(data) }),
-  registrarGuardia: (data: { guardiaDesde: string; guardiaHasta: string; cantidad: number; guardiaNovedades?: string }) =>
+  registrarGuardia: (data: { guardiaDesde: string; guardiaHasta: string; guardiaDias: DiaGuardia[]; guardiaNovedades?: string }) =>
     apiFetch<Movimiento>('/movimientos/guardia', { method: 'POST', body: JSON.stringify(data) }),
   ajuste: (data: { tecnicoId: string; cantidad: number; motivoAjuste: string }) =>
     apiFetch<Movimiento>('/movimientos/ajuste', { method: 'POST', body: JSON.stringify(data) }),
   mios: () => apiFetch<Movimiento[]>('/movimientos/mios'),
   saldo: (tecnicoId: string) => apiFetch<{ tecnicoId: string; saldo: number }>(`/movimientos/saldo/${tecnicoId}`),
+  saldos: (sectorId?: string) => apiFetch<SaldoTecnico[]>(`/movimientos/saldos${sectorId ? `?sectorId=${sectorId}` : ''}`),
   deMiSector: (estado?: string) => apiFetch<Movimiento[]>(`/movimientos/sector${estado ? `?estado=${estado}` : ''}`),
   todos: (estado?: string) => apiFetch<Movimiento[]>(`/movimientos${estado ? `?estado=${estado}` : ''}`),
   aprobar: (id: string) => apiFetch<Movimiento>(`/movimientos/${id}/aprobar`, { method: 'PATCH' }),

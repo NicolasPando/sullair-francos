@@ -18,6 +18,7 @@ import {
   registrarGuardiaDecorator,
   resolverDecorator,
   saldoDecorator,
+  saldosDecorator,
   sectorDecorator,
   solicitarConsumidoDecorator,
 } from './movimientos.decorators';
@@ -61,6 +62,12 @@ export class MovimientosController {
   @saldoDecorator()
   saldo(@CurrentUser() user: JwtPayload, @Param('tecnicoId', ParseUUIDPipe) tecnicoId: string) {
     return this.movimientosService.saldo(user, tecnicoId);
+  }
+
+  @Get('saldos')
+  @saldosDecorator()
+  saldos(@CurrentUser() user: JwtPayload, @Query('sectorId') sectorId?: string) {
+    return this.movimientosService.saldosPorSector(user, sectorId);
   }
 
   @Get('sector')
