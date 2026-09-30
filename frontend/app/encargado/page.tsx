@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSesion } from '@/lib/useSesion';
 import { movimientosApi } from '@/lib/api';
-import { Movimiento, SaldoTecnico } from '@/lib/types';
+import { EstadoMovimiento, Movimiento, SaldoTecnico, TipoMovimiento } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 import SessionHeader from '@/components/SessionHeader';
 import MovimientoCard from '@/components/MovimientoCard';
 import Calendar from '@/components/Calendar';
 import AjusteModal from '@/components/AjusteModal';
+import HistorialFiltros from '@/components/HistorialFiltros';
+import CronosChip from '@/components/CronosChip';
 
 type Tab = 'pendientes' | 'tecnicos' | 'historial';
 type TabHistorial = 'lista' | 'calendario';
@@ -27,9 +29,17 @@ export default function EncargadoPage() {
   const [procesando, setProcesando] = useState<string | null>(null);
   const [ajustando, setAjustando] = useState<SaldoTecnico | null>(null);
 
+  const [filtroTipo, setFiltroTipo] = useState<TipoMovimiento | 'todos'>('todos');
+  const [filtroEstado, setFiltroEstado] = useState<EstadoMovimiento | 'todos'>('todos');
+  const [filtroTecnicoId, setFiltroTecnicoId] = useState('');
+
   useEffect(() => {
     if (listo) cargar();
   }, [listo, tab]);
+
+  useEffect(() => {
+    if (listo) movimientosApi.saldos().then(setTecnicos).catch(() => {});
+  }, [listo]);
 
   async function cargar() {
     setCargando(true);
@@ -39,8 +49,7 @@ export default function EncargadoPage() {
       } else if (tab === 'tecnicos') {
         setTecnicos(await movimientosApi.saldos());
       } else {
-        const data = await movimientosApi.deMiSector();
-        setHistorial(data.filter((m) => m.estado !== 'pendiente'));
+        setHistorial(await movimientosApi.deMiSector());
       }
     } catch (err: any) {
       toast(err.message, 'e');
@@ -48,6 +57,15 @@ export default function EncargadoPage() {
       setCargando(false);
     }
   }
+
+  const historialFiltrado = useMemo(() => {
+    return historial.filter((m) => {
+      if (filtroTipo !== 'todos' && m.tipo !== filtroTipo) return false;
+      if (filtroEstado !== 'todos' && m.estado !== filtroEstado) return false;
+      if (filtroTecnicoId && m.tecnico.id !== filtroTecnicoId) return false;
+      return true;
+    });
+  }, [historial, filtroTipo, filtroEstado, filtroTecnicoId]);
 
   async function aprobar(id: string) {
     setProcesando(id);
@@ -74,6 +92,15 @@ export default function EncargadoPage() {
       toast(err.message, 'e');
     } finally {
       setProcesando(null);
+    }
+  }
+
+  async function toggleCronos(id: string) {
+    try {
+      await movimientosApi.toggleCronos(id);
+      cargar();
+    } catch (err: any) {
+      toast(err.message, 'e');
     }
   }
 
@@ -128,7 +155,7 @@ export default function EncargadoPage() {
                     <div className="mv-tipo">{t.nombre}</div>
                     <div className="mv-tec">{t.activo ? 'Activo' : 'Inactivo'}</div>
                   </div>
-                  <div className={`mv-cant`}>{t.saldo}</div>
+                  <div className="mv-cant" style={{ color: t.saldo < 0 ? 'var(--red)' : 'inherit' }}>{t.saldo}</div>
                 </div>
                 <div className="mv-acts">
                   <button className="btn btn-sec btn-sm" onClick={() => setAjustando(t)}>Ajuste de saldo</button>
@@ -138,16 +165,28 @@ export default function EncargadoPage() {
           )
         ) : (
           <>
+            <CronosChip movimientos={historial} />
+            <HistorialFiltros
+              tipo={filtroTipo}
+              onTipo={setFiltroTipo}
+              estado={filtroEstado}
+              onEstado={setFiltroEstado}
+              tecnicoId={filtroTecnicoId}
+              onTecnico={setFiltroTecnicoId}
+              tecnicos={tecnicos.map((t) => ({ id: t.tecnicoId, nombre: t.nombre }))}
+            />
             <div className="cal-sub">
               <button className={`cal-sub-btn ${subTabHistorial === 'lista' ? 'on' : ''}`} onClick={() => setSubTabHistorial('lista')}>Lista</button>
               <button className={`cal-sub-btn ${subTabHistorial === 'calendario' ? 'on' : ''}`} onClick={() => setSubTabHistorial('calendario')}>Calendario</button>
             </div>
             {subTabHistorial === 'calendario' ? (
-              <Calendar movimientos={historial} />
-            ) : historial.length === 0 ? (
-              <div className="empty">Sin movimientos resueltos todavía.</div>
+              <Calendar movimientos={historialFiltrado} />
+            ) : historialFiltrado.length === 0 ? (
+              <div className="empty">Sin movimientos para mostrar.</div>
             ) : (
-              historial.map((m) => <MovimientoCard key={m.id} movimiento={m} mostrarTecnico />)
+              historialFiltrado.map((m) => (
+                <MovimientoCard key={m.id} movimiento={m} mostrarTecnico onToggleCronos={toggleCronos} />
+              ))
             )}
           </>
         )}

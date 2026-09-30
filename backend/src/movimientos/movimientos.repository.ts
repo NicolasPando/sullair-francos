@@ -232,4 +232,20 @@ export class MovimientosRepository {
 
     return this.movimientoRepository.save(movimiento);
   }
+
+  // Marca/desmarca un movimiento ya aprobado como cargado en el sistema Cronos.
+  // Mismo criterio de sector que resolver(): encargado solo sobre su propio sector.
+  async toggleCronos(id: string, restringirASectorId?: string) {
+    const movimiento = await this.movimientoRepository.findOne({ where: { id } });
+    if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
+    if (restringirASectorId && movimiento.tecnico.sector?.id !== restringirASectorId) {
+      throw new NotFoundException('Movimiento no encontrado');
+    }
+    if (movimiento.estado !== EstadoMovimiento.APROBADO) {
+      throw new BadRequestException('Solo se puede marcar en Cronos un movimiento aprobado');
+    }
+
+    movimiento.cronos = !movimiento.cronos;
+    return this.movimientoRepository.save(movimiento);
+  }
 }

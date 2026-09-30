@@ -182,3 +182,21 @@ main{flex:1;}
 .tk-div{position:relative;height:0;border-top:2px dashed #C7C0AF;margin:5px 0;}
 .tk-sign{padding:9px 18px 14px;font-size:11.5px;color:#5A6066;}
 .tk-sign .who{font-weight:700;color:var(--carbon);}
+
+/* ─── CRONOS (toggle de carga en sistema externo) ─── */
+.btn-cronos-ok{background:var(--green);color:#fff;border:none;}
+.btn-cronos-ok:hover{background:#3a7e58;}
+.btn-cronos-no{background:transparent;color:var(--red);border:1.5px solid var(--red);}
+.btn-cronos-no:hover{background:var(--red);color:#fff;}
+.cronos-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;margin-bottom:10px;margin-right:8px;}
+.cronos-chip.pend{background:var(--red-bg);color:#7A2A22;}
+.cronos-chip.ok{background:var(--green-bg);color:#22513A;}
+
+/* ─── FILTROS DE HISTORIAL ─── */
+.hist-filters{background:var(--graph2);border-radius:9px;padding:12px 13px;margin-bottom:13px;}
+.f-pills-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:7px;}
+.f-pills-row:last-child{margin-bottom:0;}
+.f-pill-label{font-family:var(--fm);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);white-space:nowrap;}
+.f-pill{background:var(--graph);border:1px solid var(--line);color:var(--muted);border-radius:20px;padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;}
+.f-pill.on{background:var(--amber);color:#241A06;border-color:var(--amber);}
+.f-tec-sel{background:var(--graph);border:1px solid var(--line);color:var(--bone);border-radius:7px;padding:7px 10px;font-size:13px;min-width:160px;}

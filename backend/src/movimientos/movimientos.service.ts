@@ -71,13 +71,18 @@ export class MovimientosService {
     return this.movimientosRepository.resolver(id, aprobar, user.nombre, motivoRechazo, restringirASectorId);
   }
 
+  async toggleCronos(user: JwtPayload, id: string) {
+    const restringirASectorId = user.rol === RolesEnum.ENCARGADO ? user.sectorId : undefined;
+    return this.movimientosRepository.toggleCronos(id, restringirASectorId);
+  }
+
   async exportCsv() {
     const movimientos = await this.movimientosRepository.findAll();
     const headers = [
       'id', 'tecnico', 'sector', 'tipo', 'cantidad', 'fecha_trabajo', 'dia_trabajado',
       'fecha_deseada', 'turno', 'fechas_solicitadas', 'guardia_desde', 'guardia_hasta',
       'guardia_dias', 'guardia_novedades',
-      'estado', 'creado_en', 'resuelto_por', 'resuelto_en', 'motivo_rechazo', 'motivo_ajuste', 'comentario',
+      'estado', 'cronos', 'creado_en', 'resuelto_por', 'resuelto_en', 'motivo_rechazo', 'motivo_ajuste', 'comentario',
     ];
 
     const q = (v: unknown) => {
@@ -91,7 +96,7 @@ export class MovimientosService {
         m.id, m.tecnico?.nombre, m.tecnico?.sector?.nombre, m.tipo, m.cantidad, m.fechaTrabajo,
         m.diaTrabajado, m.fechaDeseada, m.turno, m.fechasSolicitadas ? JSON.stringify(m.fechasSolicitadas) : '',
         m.guardiaDesde, m.guardiaHasta, m.guardiaDias ? JSON.stringify(m.guardiaDias) : '', m.guardiaNovedades,
-        m.estado, m.creadoEn?.toISOString(), m.resueltoPor, m.resueltoEn?.toISOString(),
+        m.estado, m.cronos ? 'si' : 'no', m.creadoEn?.toISOString(), m.resueltoPor, m.resueltoEn?.toISOString(),
         m.motivoRechazo, m.motivoAjuste, m.comentario,
       ]
         .map(q)

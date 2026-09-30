@@ -32,10 +32,12 @@ function fc(n: number) {
 export default function MovimientoCard({
   movimiento,
   mostrarTecnico = false,
+  onToggleCronos,
   acciones,
 }: {
   movimiento: Movimiento;
   mostrarTecnico?: boolean;
+  onToggleCronos?: (id: string) => void;
   acciones?: ReactNode;
 }) {
   const m = movimiento;
@@ -43,6 +45,7 @@ export default function MovimientoCard({
   const esGuardia = m.tipo === 'guardia';
   const signo = m.tipo === 'consumido' ? '-' : '+';
   const convocados = (m.guardiaDias || []).filter((d) => d.convocado).length;
+  const mostrarBotonCronos = onToggleCronos && m.estado === 'aprobado';
 
   return (
     <div className="mv">
@@ -77,6 +80,14 @@ export default function MovimientoCard({
       <div className="mv-acts">
         <span className={`badge ${BADGE_ESTADO[m.estado]}`}>{m.estado}</span>
         <button className="btn btn-ghost btn-sm" onClick={() => setVerTicket(true)}>Ver comprobante</button>
+        {mostrarBotonCronos && (
+          <button
+            className={`btn btn-sm ${m.cronos ? 'btn-cronos-ok' : 'btn-cronos-no'}`}
+            onClick={() => onToggleCronos!(m.id)}
+          >
+            {m.cronos ? '✓' : '✗'} Cronos
+          </button>
+        )}
         {acciones}
       </div>
 

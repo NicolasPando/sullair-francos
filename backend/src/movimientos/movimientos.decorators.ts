@@ -37,6 +37,9 @@ export function findAllDecorator() {
 export function resolverDecorator() {
   return applyDecorators(ApiOperation({ summary: 'Aprueba o rechaza un movimiento pendiente' }), ApiBearerAuth(), ...conRoles(RolesEnum.ENCARGADO, RolesEnum.ADMIN));
 }
+export function cronosDecorator() {
+  return applyDecorators(ApiOperation({ summary: 'Marca/desmarca un movimiento aprobado como cargado en Cronos' }), ApiBearerAuth(), ...conRoles(RolesEnum.ENCARGADO, RolesEnum.ADMIN));
+}
 export function exportCsvDecorator() {
   return applyDecorators(ApiOperation({ summary: 'Exporta todos los movimientos a CSV (admin)' }), ApiBearerAuth(), ...conRoles(RolesEnum.ADMIN));
 }

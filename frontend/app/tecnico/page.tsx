@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSesion } from '@/lib/useSesion';
 import { movimientosApi } from '@/lib/api';
-import { DiaGuardia, FechaSolicitada, Movimiento, Turno } from '@/lib/types';
+import { DiaGuardia, FechaSolicitada, Movimiento, TipoMovimiento, Turno } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 import SessionHeader from '@/components/SessionHeader';
 import MovimientoCard from '@/components/MovimientoCard';
 import Modal from '@/components/Modal';
 import Calendar from '@/components/Calendar';
+import HistorialFiltros from '@/components/HistorialFiltros';
 
 type ModalAbierto = null | 'generado' | 'consumido' | 'guardia';
 type TabHistorial = 'lista' | 'calendario';
@@ -44,6 +45,7 @@ export default function TecnicoPage() {
   const [cargando, setCargando] = useState(true);
   const [tab, setTab] = useState<'inicio' | 'historial'>('inicio');
   const [subTabHistorial, setSubTabHistorial] = useState<TabHistorial>('lista');
+  const [filtroTipo, setFiltroTipo] = useState<TipoMovimiento | 'todos'>('todos');
   const [modal, setModal] = useState<ModalAbierto>(null);
 
   useEffect(() => {
@@ -66,6 +68,11 @@ export default function TecnicoPage() {
       setCargando(false);
     }
   }
+
+  const movimientosFiltrados = useMemo(
+    () => (filtroTipo === 'todos' ? movimientos : movimientos.filter((m) => m.tipo === filtroTipo)),
+    [movimientos, filtroTipo],
+  );
 
   if (!listo || !usuario) return null;
 
@@ -111,6 +118,7 @@ export default function TecnicoPage() {
 
         {tab === 'historial' && (
           <>
+            <HistorialFiltros tipo={filtroTipo} onTipo={setFiltroTipo} />
             <div className="cal-sub">
               <button className={`cal-sub-btn ${subTabHistorial === 'lista' ? 'on' : ''}`} onClick={() => setSubTabHistorial('lista')}>Lista</button>
               <button className={`cal-sub-btn ${subTabHistorial === 'calendario' ? 'on' : ''}`} onClick={() => setSubTabHistorial('calendario')}>Calendario</button>
@@ -118,11 +126,11 @@ export default function TecnicoPage() {
             {cargando ? (
               <div className="lw"><div className="spinr" /></div>
             ) : subTabHistorial === 'calendario' ? (
-              <Calendar movimientos={movimientos} />
-            ) : movimientos.length === 0 ? (
+              <Calendar movimientos={movimientosFiltrados} />
+            ) : movimientosFiltrados.length === 0 ? (
               <div className="empty">Todavía no registraste ningún movimiento.</div>
             ) : (
-              movimientos.map((m) => <MovimientoCard key={m.id} movimiento={m} />)
+              movimientosFiltrados.map((m) => <MovimientoCard key={m.id} movimiento={m} />)
             )}
           </>
         )}

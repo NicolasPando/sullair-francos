@@ -99,6 +99,7 @@ export const movimientosApi = {
   aprobar: (id: string) => apiFetch<Movimiento>(`/movimientos/${id}/aprobar`, { method: 'PATCH' }),
   rechazar: (id: string, motivoRechazo: string) =>
     apiFetch<Movimiento>(`/movimientos/${id}/rechazar`, { method: 'PATCH', body: JSON.stringify({ motivoRechazo }) }),
+  toggleCronos: (id: string) => apiFetch<Movimiento>(`/movimientos/${id}/cronos`, { method: 'PATCH' }),
   exportCsvUrl: () => `${API_URL}/movimientos/export/csv`,
 };
 

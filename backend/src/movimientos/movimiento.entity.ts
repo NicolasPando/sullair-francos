@@ -98,6 +98,11 @@ export class Movimiento {
   @Column({ type: 'text', nullable: true })
   comentario: string | null;
 
+  // Si el movimiento (ya aprobado) fue cargado en el sistema Cronos de la empresa.
+  // Lo marcan encargado/admin desde el historial, no afecta el saldo ni el estado.
+  @Column({ default: false })
+  cronos: boolean;
+
   @CreateDateColumn()
   creadoEn: Date;
 }

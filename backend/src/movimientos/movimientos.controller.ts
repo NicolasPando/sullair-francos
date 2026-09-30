@@ -11,6 +11,7 @@ import { EstadoMovimiento } from './movimiento.entity';
 import { CurrentUser, JwtPayload } from '../auth/decorators/current-user.decorator';
 import {
   ajusteDecorator,
+  cronosDecorator,
   declararGeneradoDecorator,
   exportCsvDecorator,
   findAllDecorator,
@@ -101,5 +102,11 @@ export class MovimientosController {
   @resolverDecorator()
   rechazar(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RechazarDto) {
     return this.movimientosService.resolver(user, id, false, dto.motivoRechazo);
+  }
+
+  @Patch(':id/cronos')
+  @cronosDecorator()
+  toggleCronos(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.movimientosService.toggleCronos(user, id);
   }
 }

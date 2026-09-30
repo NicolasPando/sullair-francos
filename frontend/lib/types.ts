@@ -77,5 +77,6 @@ export interface Movimiento {
   resueltoEn: string | null;
   motivoRechazo: string | null;
   comentario: string | null;
+  cronos: boolean;
   creadoEn: string;
 }

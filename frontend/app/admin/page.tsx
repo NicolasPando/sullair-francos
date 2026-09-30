@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSesion } from '@/lib/useSesion';
 import { movimientosApi, sectoresApi, tecnicosApi, usuariosApi } from '@/lib/api';
-import { Movimiento, Sector, SaldoTecnico, Tecnico, Usuario } from '@/lib/types';
+import { EstadoMovimiento, Movimiento, Sector, SaldoTecnico, Tecnico, TipoMovimiento, Usuario } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 import SessionHeader from '@/components/SessionHeader';
 import MovimientoCard from '@/components/MovimientoCard';
 import Modal from '@/components/Modal';
 import Calendar from '@/components/Calendar';
 import AjusteModal from '@/components/AjusteModal';
+import HistorialFiltros from '@/components/HistorialFiltros';
+import CronosChip from '@/components/CronosChip';
 
 type Tab = 'resumen' | 'movimientos' | 'tecnicos' | 'sectores' | 'usuarios';
 type TabHistorial = 'lista' | 'calendario';
@@ -19,6 +21,9 @@ export default function AdminPage() {
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('resumen');
   const [subTabHistorial, setSubTabHistorial] = useState<TabHistorial>('lista');
+  const [filtroTipo, setFiltroTipo] = useState<TipoMovimiento | 'todos'>('todos');
+  const [filtroEstado, setFiltroEstado] = useState<EstadoMovimiento | 'todos'>('todos');
+  const [filtroTecnicoId, setFiltroTecnicoId] = useState('');
 
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
@@ -61,6 +66,24 @@ export default function AdminPage() {
   }
 
   const saldoDe = (tecnicoId: string) => saldos.find((s) => s.tecnicoId === tecnicoId)?.saldo ?? 0;
+  const movimientosFiltrados = useMemo(() => {
+    return movimientos.filter((m) => {
+      if (filtroTipo !== 'todos' && m.tipo !== filtroTipo) return false;
+      if (filtroEstado !== 'todos' && m.estado !== filtroEstado) return false;
+      if (filtroTecnicoId && m.tecnico.id !== filtroTecnicoId) return false;
+      return true;
+    });
+  }, [movimientos, filtroTipo, filtroEstado, filtroTecnicoId]);
+
+  async function toggleCronos(id: string) {
+    try {
+      await movimientosApi.toggleCronos(id);
+      cargarTodo();
+    } catch (err: any) {
+      toast(err.message, 'e');
+    }
+  }
+
   const pendientes = movimientos.filter((m) => m.estado === 'pendiente').length;
   const aprobados = movimientos.filter((m) => m.estado === 'aprobado').length;
   const tecnicosActivos = tecnicos.filter((t) => t.activo).length;
@@ -106,16 +129,28 @@ export default function AdminPage() {
 
             {tab === 'movimientos' && (
               <>
+                <CronosChip movimientos={movimientos} />
+                <HistorialFiltros
+                  tipo={filtroTipo}
+                  onTipo={setFiltroTipo}
+                  estado={filtroEstado}
+                  onEstado={setFiltroEstado}
+                  tecnicoId={filtroTecnicoId}
+                  onTecnico={setFiltroTecnicoId}
+                  tecnicos={tecnicos.filter((t) => t.activo).map((t) => ({ id: t.id, nombre: t.nombre, sector: t.sector?.nombre }))}
+                />
                 <div className="cal-sub">
                   <button className={`cal-sub-btn ${subTabHistorial === 'lista' ? 'on' : ''}`} onClick={() => setSubTabHistorial('lista')}>Lista</button>
                   <button className={`cal-sub-btn ${subTabHistorial === 'calendario' ? 'on' : ''}`} onClick={() => setSubTabHistorial('calendario')}>Calendario</button>
                 </div>
                 {subTabHistorial === 'calendario' ? (
-                  <Calendar movimientos={movimientos} />
-                ) : movimientos.length === 0 ? (
-                  <div className="empty">Todavía no hay movimientos cargados.</div>
+                  <Calendar movimientos={movimientosFiltrados} />
+                ) : movimientosFiltrados.length === 0 ? (
+                  <div className="empty">Sin movimientos para mostrar.</div>
                 ) : (
-                  movimientos.map((m) => <MovimientoCard key={m.id} movimiento={m} mostrarTecnico />)
+                  movimientosFiltrados.map((m) => (
+                    <MovimientoCard key={m.id} movimiento={m} mostrarTecnico onToggleCronos={toggleCronos} />
+                  ))
                 )}
               </>
             )}
