@@ -277,7 +277,7 @@ function ModalSolicitarConsumido({ saldo, onClose, onListo }: { saldo: number; o
             <div className="fdia-row" key={i}>
               <div className="fdia-label">Día {i + 1} de {diasEsperados}{f.esMedio ? ' · medio franco' : ''}</div>
               <input
-                type="date" required min={hoyStr()}
+                type="date" required
                 value={f.fecha}
                 onChange={(e) => setFecha(i, e.target.value)}
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 7, border: '1.5px solid #D8D2C4', fontSize: 15 }}

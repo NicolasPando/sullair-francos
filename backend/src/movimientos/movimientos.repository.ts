@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Movimiento, EstadoMovimiento, TipoMovimiento } from './movimiento.entity';
 import { Tecnico } from '../tecnicos/tecnico.entity';
 import { DeclararGeneradoDto } from './dto/declarar-generado.dto';
@@ -56,9 +56,10 @@ export class MovimientosRepository {
 
   // Bulk: saldo de todos los tecnicos de un sector (o de todos, si no se pasa sectorId).
   // Evita N llamadas a saldo() desde el frontend para listados (resumen admin, tecnicos del encargado, etc).
-  async saldosPorSector(sectorId?: string) {
+  async saldosPorSector(sectorIds?: string[]) {
+    if (sectorIds && sectorIds.length === 0) return [];
     const tecnicos = await this.tecnicoRepository.find({
-      where: sectorId ? { sector: { id: sectorId } } : {},
+      where: sectorIds ? { sector: { id: In(sectorIds) } } : {},
       order: { nombre: 'ASC' },
     });
     const resultados = await Promise.all(
@@ -66,6 +67,7 @@ export class MovimientosRepository {
         tecnicoId: t.id,
         nombre: t.nombre,
         sector: t.sector?.nombre ?? null,
+        sectorId: t.sector?.id ?? null,
         activo: t.activo,
         saldo: await this.saldo(t.id),
       })),
@@ -186,25 +188,61 @@ export class MovimientosRepository {
     );
   }
 
-  findByTecnico(tecnicoId: string) {
-    return this.movimientoRepository.find({
+  // Agrega `saldoRestante` a cada movimiento aprobado que afecta el saldo (generado, consumido, ajuste):
+  // es el saldo del tecnico justo despues de resolver ese movimiento. Se calcula acumulando todos los
+  // aprobados del tecnico en orden de resolucion, asi tambien funciona con movimientos viejos.
+  private async anotarSaldoRestante(movs: Movimiento[]): Promise<Movimiento[]> {
+    const tecnicoIds = [...new Set(movs.map((m) => m.tecnico.id))];
+    if (!tecnicoIds.length) return movs;
+
+    const aprobados = await this.movimientoRepository.find({
+      where: { tecnico: { id: In(tecnicoIds) }, estado: EstadoMovimiento.APROBADO },
+    });
+    const orden = (m: Movimiento) => new Date(m.resueltoEn ?? m.creadoEn).getTime();
+    aprobados.sort((a, b) => orden(a) - orden(b) || new Date(a.creadoEn).getTime() - new Date(b.creadoEn).getTime());
+
+    const acumulado = new Map<string, number>(); // tecnicoId -> saldo corriente
+    const saldoTras = new Map<string, number>(); // movimientoId -> saldo despues de ese movimiento
+    for (const m of aprobados) {
+      let delta = 0;
+      if (m.tipo === TipoMovimiento.GENERADO || m.tipo === TipoMovimiento.AJUSTE) delta = m.cantidad;
+      else if (m.tipo === TipoMovimiento.CONSUMIDO) delta = -m.cantidad;
+      const nuevo = Math.round(((acumulado.get(m.tecnico.id) ?? 0) + delta) * 10) / 10;
+      acumulado.set(m.tecnico.id, nuevo);
+      saldoTras.set(m.id, nuevo);
+    }
+
+    for (const m of movs) {
+      if (m.estado === EstadoMovimiento.APROBADO && m.tipo !== TipoMovimiento.GUARDIA) {
+        m.saldoRestante = saldoTras.get(m.id);
+      }
+    }
+    return movs;
+  }
+
+  async findByTecnico(tecnicoId: string) {
+    const movs = await this.movimientoRepository.find({
       where: { tecnico: { id: tecnicoId } },
       order: { creadoEn: 'DESC' },
     });
+    return this.anotarSaldoRestante(movs);
   }
 
-  findBySector(sectorId: string, estado?: EstadoMovimiento) {
-    return this.movimientoRepository.find({
-      where: { tecnico: { sector: { id: sectorId } }, ...(estado ? { estado } : {}) },
+  async findBySector(sectorIds: string[], estado?: EstadoMovimiento) {
+    if (sectorIds.length === 0) return [];
+    const movs = await this.movimientoRepository.find({
+      where: { tecnico: { sector: { id: In(sectorIds) } }, ...(estado ? { estado } : {}) },
       order: { creadoEn: 'DESC' },
     });
+    return this.anotarSaldoRestante(movs);
   }
 
-  findAll(estado?: EstadoMovimiento) {
-    return this.movimientoRepository.find({
+  async findAll(estado?: EstadoMovimiento) {
+    const movs = await this.movimientoRepository.find({
       where: estado ? { estado } : {},
       order: { creadoEn: 'DESC' },
     });
+    return this.anotarSaldoRestante(movs);
   }
 
   // Aprobar/rechazar: a diferencia de la version anterior, aprobar un consumido NO se bloquea
@@ -214,11 +252,11 @@ export class MovimientosRepository {
     aprobar: boolean,
     resueltoPor: string,
     motivoRechazo?: string,
-    restringirASectorId?: string,
+    restringirASectorIds?: string[],
   ) {
     const movimiento = await this.movimientoRepository.findOne({ where: { id } });
     if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
-    if (restringirASectorId && movimiento.tecnico.sector?.id !== restringirASectorId) {
+    if (restringirASectorIds && !restringirASectorIds.includes(movimiento.tecnico.sector?.id)) {
       throw new NotFoundException('Movimiento no encontrado');
     }
     if (movimiento.estado !== EstadoMovimiento.PENDIENTE) {
@@ -230,16 +268,22 @@ export class MovimientosRepository {
     movimiento.resueltoEn = new Date();
     if (!aprobar) movimiento.motivoRechazo = motivoRechazo ?? null;
 
-    return this.movimientoRepository.save(movimiento);
+    const guardado = await this.movimientoRepository.save(movimiento);
+    const [conSaldo] = await this.anotarSaldoRestante([guardado]);
+    return conSaldo;
   }
 
   // Marca/desmarca un movimiento ya aprobado como cargado en el sistema Cronos.
-  // Mismo criterio de sector que resolver(): encargado solo sobre su propio sector.
-  async toggleCronos(id: string, restringirASectorId?: string) {
+  // Solo aplica a francos solicitados y guardias pasivas (los francos generados y los ajustes no se cargan).
+  // Mismo criterio de sector que resolver(): encargado solo sobre sus sectores asignados.
+  async toggleCronos(id: string, restringirASectorIds?: string[]) {
     const movimiento = await this.movimientoRepository.findOne({ where: { id } });
     if (!movimiento) throw new NotFoundException('Movimiento no encontrado');
-    if (restringirASectorId && movimiento.tecnico.sector?.id !== restringirASectorId) {
+    if (restringirASectorIds && !restringirASectorIds.includes(movimiento.tecnico.sector?.id)) {
       throw new NotFoundException('Movimiento no encontrado');
+    }
+    if (movimiento.tipo !== TipoMovimiento.CONSUMIDO && movimiento.tipo !== TipoMovimiento.GUARDIA) {
+      throw new BadRequestException('Solo los francos solicitados y las guardias pasivas se cargan en Cronos');
     }
     if (movimiento.estado !== EstadoMovimiento.APROBADO) {
       throw new BadRequestException('Solo se puede marcar en Cronos un movimiento aprobado');

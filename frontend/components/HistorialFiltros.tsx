@@ -1,6 +1,8 @@
 'use client';
 
-import { EstadoMovimiento, TipoMovimiento } from '@/lib/types';
+import { EstadoMovimiento, Sector, TipoMovimiento } from '@/lib/types';
+import { CronosFiltro } from '@/lib/filtros';
+import SectorPills from './SectorPills';
 
 const TIPOS: [TipoMovimiento | 'todos', string][] = [
   ['todos', 'Todos'],
@@ -17,10 +19,17 @@ const ESTADOS: [EstadoMovimiento | 'todos', string][] = [
   ['rechazado', 'Rechazado'],
 ];
 
+const CRONOS: [CronosFiltro, string][] = [
+  ['todos', 'Todos'],
+  ['pendiente', '✗ Pendiente en Cronos'],
+  ['cargado', '✓ Cargado en Cronos'],
+];
+
 interface TecnicoOpcion {
   id: string;
   nombre: string;
   sector?: string | null;
+  sectorId?: string | null;
 }
 
 export default function HistorialFiltros({
@@ -31,6 +40,11 @@ export default function HistorialFiltros({
   tecnicoId,
   onTecnico,
   tecnicos,
+  sectores,
+  sectorId,
+  onSector,
+  cronos,
+  onCronos,
 }: {
   tipo: TipoMovimiento | 'todos';
   onTipo: (v: TipoMovimiento | 'todos') => void;
@@ -39,8 +53,15 @@ export default function HistorialFiltros({
   tecnicoId?: string;
   onTecnico?: (v: string) => void;
   tecnicos?: TecnicoOpcion[];
+  sectores?: Sector[];
+  sectorId?: string;
+  onSector?: (v: string) => void;
+  cronos?: CronosFiltro;
+  onCronos?: (v: CronosFiltro) => void;
 }) {
   const conFiltrosAvanzados = estado !== undefined && onEstado && onTecnico;
+  // al elegir un sector, el selector de técnicos muestra solo los de ese sector
+  const tecnicosVisibles = (tecnicos || []).filter((t) => !sectorId || t.sectorId === sectorId);
 
   return (
     <div className="hist-filters">
@@ -58,12 +79,21 @@ export default function HistorialFiltros({
               <button key={v} className={`f-pill ${estado === v ? 'on' : ''}`} onClick={() => onEstado!(v)}>{l}</button>
             ))}
           </div>
+          {cronos !== undefined && onCronos && (
+            <div className="f-pills-row">
+              <span className="f-pill-label">Cronos:</span>
+              {CRONOS.map(([v, l]) => (
+                <button key={v} className={`f-pill ${cronos === v ? 'on' : ''}`} onClick={() => onCronos(v)}>{l}</button>
+              ))}
+            </div>
+          )}
+          {sectores && onSector && <SectorPills sectores={sectores} value={sectorId || ''} onChange={onSector} />}
           <div className="f-pills-row">
             <span className="f-pill-label">Técnico:</span>
             <select className="f-tec-sel" value={tecnicoId || ''} onChange={(e) => onTecnico!(e.target.value)}>
               <option value="">Todos</option>
-              {(tecnicos || []).map((t) => (
-                <option key={t.id} value={t.id}>{t.nombre}{t.sector ? ` — ${t.sector}` : ''}</option>
+              {tecnicosVisibles.map((t) => (
+                <option key={t.id} value={t.id}>{t.nombre}{!sectorId && t.sector ? ` — ${t.sector}` : ''}</option>
               ))}
             </select>
           </div>

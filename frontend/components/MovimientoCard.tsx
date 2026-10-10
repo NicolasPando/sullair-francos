@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Movimiento } from '@/lib/types';
 import { ReactNode } from 'react';
 import Ticket from './Ticket';
+import { aplicaCronos } from '@/lib/filtros';
 
 const TITULOS: Record<string, string> = {
   generado: 'Franco generado',
@@ -45,7 +46,7 @@ export default function MovimientoCard({
   const esGuardia = m.tipo === 'guardia';
   const signo = m.tipo === 'consumido' ? '-' : '+';
   const convocados = (m.guardiaDias || []).filter((d) => d.convocado).length;
-  const mostrarBotonCronos = onToggleCronos && m.estado === 'aprobado';
+  const mostrarBotonCronos = onToggleCronos && aplicaCronos(m);
 
   return (
     <div className="mv">

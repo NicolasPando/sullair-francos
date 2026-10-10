@@ -33,13 +33,14 @@ export interface Usuario {
   id: string;
   nombre: string;
   rol: 'admin' | 'encargado';
-  sector: Sector | null;
+  sectores: Sector[]; // sectores a cargo (encargado); vacio para admin
 }
 
 export interface SaldoTecnico {
   tecnicoId: string;
   nombre: string;
   sector: string | null;
+  sectorId: string | null;
   activo: boolean;
   saldo: number;
 }
@@ -79,4 +80,6 @@ export interface Movimiento {
   comentario: string | null;
   cronos: boolean;
   creadoEn: string;
+  // saldo del tecnico justo despues de aprobar este movimiento (solo generado/consumido/ajuste aprobados)
+  saldoRestante?: number;
 }

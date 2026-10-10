@@ -94,7 +94,7 @@ export class AuthService {
     const passwordOk = await bcrypt.compare(dto.password, usuario.passwordHash);
     if (!passwordOk) throw credencialesInvalidas();
 
-    return this.firmarToken(usuario.id, usuario.rol, usuario.nombre, usuario.sector?.id ?? null);
+    return this.firmarToken(usuario.id, usuario.rol, usuario.nombre, usuario.sectores?.[0]?.id ?? usuario.sector?.id ?? null);
   }
 
   private firmarToken(sub: string, rol: RolesEnum, nombre: string, sectorId?: string | null) {

@@ -96,6 +96,13 @@ export default function Ticket({ movimiento, onClose }: { movimiento: Movimiento
             </>
           )}
 
+          {m.estado === 'aprobado' && m.saldoRestante !== undefined && (
+            <div className="tk-row">
+              <span>Cantidad de francos que restan</span>
+              <b>{fc(m.saldoRestante).replace(/^-0,0$/, '0,0')}</b>
+            </div>
+          )}
+
           {m.comentario && <div className="tk-row col"><span>Comentario</span><b>{m.comentario}</b></div>}
           {m.motivoAjuste && <div className="tk-row col"><span>Motivo</span><b>{m.motivoAjuste}</b></div>}
           {m.motivoRechazo && <div className="tk-row col"><span>Motivo rechazo</span><b>{m.motivoRechazo}</b></div>}

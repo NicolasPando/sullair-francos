@@ -105,4 +105,8 @@ export class Movimiento {
 
   @CreateDateColumn()
   creadoEn: Date;
+
+  // Campo calculado (NO es columna): saldo del tecnico justo despues de aprobar este movimiento.
+  // Lo completa MovimientosRepository en los listados, solo para generado/consumido/ajuste aprobados.
+  saldoRestante?: number;
 }

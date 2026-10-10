@@ -1,4 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Usuario } from '../usuarios/entities/usuario.entity';
 import { MovimientosRepository } from './movimientos.repository';
 import { TecnicosRepository } from '../tecnicos/tecnicos.repository';
 import { DeclararGeneradoDto } from './dto/declarar-generado.dto';
@@ -14,7 +17,16 @@ export class MovimientosService {
   constructor(
     private readonly movimientosRepository: MovimientosRepository,
     private readonly tecnicosRepository: TecnicosRepository,
+    @InjectRepository(Usuario) private readonly usuarioRepository: Repository<Usuario>,
   ) {}
+
+  // Sectores que un usuario puede gestionar. Admin: undefined (sin restriccion). Encargado: los sectores
+  // que tiene asignados HOY en la base (no los del token), asi un cambio de asignacion aplica enseguida.
+  private async sectoresPermitidos(user: JwtPayload): Promise<string[] | undefined> {
+    if (user.rol !== RolesEnum.ENCARGADO) return undefined;
+    const usuario = await this.usuarioRepository.findOne({ where: { id: user.sub } });
+    return (usuario?.sectores ?? []).map((s) => s.id);
+  }
 
   declararGenerado(user: JwtPayload, dto: DeclararGeneradoDto) {
     return this.movimientosRepository.declararGenerado(user.sub, dto);
@@ -30,10 +42,11 @@ export class MovimientosService {
 
   // Admin puede ajustar a cualquier tecnico. Encargado solo a tecnicos de su propio sector.
   async ajuste(user: JwtPayload, dto: AjusteDto) {
-    if (user.rol === RolesEnum.ENCARGADO) {
+    const permitidos = await this.sectoresPermitidos(user);
+    if (permitidos) {
       const tecnico = await this.tecnicosRepository.findOne(dto.tecnicoId);
-      if (tecnico.sector?.id !== user.sectorId) {
-        throw new ForbiddenException('Solo podes ajustar el saldo de tecnicos de tu sector');
+      if (!permitidos.includes(tecnico.sector?.id)) {
+        throw new ForbiddenException('Solo podes ajustar el saldo de tecnicos de tus sectores');
       }
     }
     return this.movimientosRepository.ajuste(dto, user.nombre);
@@ -52,14 +65,17 @@ export class MovimientosService {
   }
 
   // Listado con saldo calculado para cada tecnico. Un encargado siempre queda
-  // restringido a su propio sector, sin importar que sectorId le pidan.
-  saldosPorSector(user: JwtPayload, sectorId?: string) {
-    const sectorEfectivo = user.rol === RolesEnum.ENCARGADO ? user.sectorId : sectorId;
-    return this.movimientosRepository.saldosPorSector(sectorEfectivo);
+  // restringido a sus sectores asignados, sin importar que sectorId le pidan.
+  async saldosPorSector(user: JwtPayload, sectorId?: string) {
+    const permitidos = await this.sectoresPermitidos(user);
+    let sectores: string[] | undefined;
+    if (permitidos) sectores = sectorId ? permitidos.filter((id) => id === sectorId) : permitidos;
+    else sectores = sectorId ? [sectorId] : undefined;
+    return this.movimientosRepository.saldosPorSector(sectores);
   }
 
-  movimientosDeMiSector(user: JwtPayload, estado?: EstadoMovimiento) {
-    return this.movimientosRepository.findBySector(user.sectorId, estado);
+  async movimientosDeMiSector(user: JwtPayload, estado?: EstadoMovimiento) {
+    return this.movimientosRepository.findBySector((await this.sectoresPermitidos(user)) ?? [], estado);
   }
 
   movimientosTodos(estado?: EstadoMovimiento) {
@@ -67,13 +83,12 @@ export class MovimientosService {
   }
 
   async resolver(user: JwtPayload, id: string, aprobar: boolean, motivoRechazo?: string) {
-    const restringirASectorId = user.rol === RolesEnum.ENCARGADO ? user.sectorId : undefined;
-    return this.movimientosRepository.resolver(id, aprobar, user.nombre, motivoRechazo, restringirASectorId);
+    const permitidos = await this.sectoresPermitidos(user);
+    return this.movimientosRepository.resolver(id, aprobar, user.nombre, motivoRechazo, permitidos);
   }
 
   async toggleCronos(user: JwtPayload, id: string) {
-    const restringirASectorId = user.rol === RolesEnum.ENCARGADO ? user.sectorId : undefined;
-    return this.movimientosRepository.toggleCronos(id, restringirASectorId);
+    return this.movimientosRepository.toggleCronos(id, await this.sectoresPermitidos(user));
   }
 
   async exportCsv() {
@@ -96,7 +111,7 @@ export class MovimientosService {
         m.id, m.tecnico?.nombre, m.tecnico?.sector?.nombre, m.tipo, m.cantidad, m.fechaTrabajo,
         m.diaTrabajado, m.fechaDeseada, m.turno, m.fechasSolicitadas ? JSON.stringify(m.fechasSolicitadas) : '',
         m.guardiaDesde, m.guardiaHasta, m.guardiaDias ? JSON.stringify(m.guardiaDias) : '', m.guardiaNovedades,
-        m.estado, m.cronos ? 'si' : 'no', m.creadoEn?.toISOString(), m.resueltoPor, m.resueltoEn?.toISOString(),
+        m.estado, m.tipo === 'consumido' || m.tipo === 'guardia' ? (m.cronos ? 'si' : 'no') : '', m.creadoEn?.toISOString(), m.resueltoPor, m.resueltoEn?.toISOString(),
         m.motivoRechazo, m.motivoAjuste, m.comentario,
       ]
         .map(q)

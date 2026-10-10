@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSesion } from '@/lib/useSesion';
 import { movimientosApi, sectoresApi, tecnicosApi, usuariosApi } from '@/lib/api';
-import { EstadoMovimiento, Movimiento, Sector, SaldoTecnico, Tecnico, TipoMovimiento, Usuario } from '@/lib/types';
+import { Movimiento, Sector, SaldoTecnico, Tecnico, Usuario } from '@/lib/types';
+import { FILTROS_INICIALES, FiltrosMovimientos, filtrarMovimientos } from '@/lib/filtros';
 import { useToast } from '@/components/Toast';
 import SessionHeader from '@/components/SessionHeader';
 import MovimientoCard from '@/components/MovimientoCard';
 import Modal from '@/components/Modal';
 import Calendar from '@/components/Calendar';
 import AjusteModal from '@/components/AjusteModal';
+import SectorPills from '@/components/SectorPills';
+import AccionesPendiente from '@/components/AccionesPendiente';
 import HistorialFiltros from '@/components/HistorialFiltros';
 import CronosChip from '@/components/CronosChip';
 
@@ -21,9 +24,8 @@ export default function AdminPage() {
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('resumen');
   const [subTabHistorial, setSubTabHistorial] = useState<TabHistorial>('lista');
-  const [filtroTipo, setFiltroTipo] = useState<TipoMovimiento | 'todos'>('todos');
-  const [filtroEstado, setFiltroEstado] = useState<EstadoMovimiento | 'todos'>('todos');
-  const [filtroTecnicoId, setFiltroTecnicoId] = useState('');
+  const [filtros, setFiltros] = useState<FiltrosMovimientos>(FILTROS_INICIALES);
+  const [sectorTecnicos, setSectorTecnicos] = useState('');
 
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
@@ -37,6 +39,7 @@ export default function AdminPage() {
   const [modalSector, setModalSector] = useState(false);
   const [modalUsuario, setModalUsuario] = useState<null | 'encargado' | 'admin'>(null);
   const [ajustando, setAjustando] = useState<{ id: string; nombre: string } | null>(null);
+  const [editandoSectores, setEditandoSectores] = useState<Usuario | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
@@ -66,14 +69,34 @@ export default function AdminPage() {
   }
 
   const saldoDe = (tecnicoId: string) => saldos.find((s) => s.tecnicoId === tecnicoId)?.saldo ?? 0;
-  const movimientosFiltrados = useMemo(() => {
-    return movimientos.filter((m) => {
-      if (filtroTipo !== 'todos' && m.tipo !== filtroTipo) return false;
-      if (filtroEstado !== 'todos' && m.estado !== filtroEstado) return false;
-      if (filtroTecnicoId && m.tecnico.id !== filtroTecnicoId) return false;
-      return true;
-    });
-  }, [movimientos, filtroTipo, filtroEstado, filtroTecnicoId]);
+  const movimientosFiltrados = useMemo(() => filtrarMovimientos(movimientos, filtros), [movimientos, filtros]);
+  const tecnicosVisibles = tecnicos.filter((t) => !sectorTecnicos || t.sector?.id === sectorTecnicos);
+
+  function cambiarFiltro<K extends keyof FiltrosMovimientos>(clave: K, valor: FiltrosMovimientos[K]) {
+    // al cambiar de sector, el técnico elegido puede no pertenecer a ese sector: se limpia
+    setFiltros((f) => ({ ...f, [clave]: valor, ...(clave === 'sectorId' ? { tecnicoId: '' } : {}) }));
+  }
+
+  // El administrador también puede aprobar / rechazar francos y guardias pendientes
+  async function aprobar(id: string) {
+    try {
+      await movimientosApi.aprobar(id);
+      toast('Movimiento aprobado.', 's');
+      cargarTodo();
+    } catch (err: any) {
+      toast(err.message, 'e');
+    }
+  }
+
+  async function rechazar(id: string, motivo: string) {
+    try {
+      await movimientosApi.rechazar(id, motivo);
+      toast('Movimiento rechazado.', 's');
+      cargarTodo();
+    } catch (err: any) {
+      toast(err.message, 'e');
+    }
+  }
 
   async function toggleCronos(id: string) {
     try {
@@ -131,13 +154,18 @@ export default function AdminPage() {
               <>
                 <CronosChip movimientos={movimientos} />
                 <HistorialFiltros
-                  tipo={filtroTipo}
-                  onTipo={setFiltroTipo}
-                  estado={filtroEstado}
-                  onEstado={setFiltroEstado}
-                  tecnicoId={filtroTecnicoId}
-                  onTecnico={setFiltroTecnicoId}
-                  tecnicos={tecnicos.filter((t) => t.activo).map((t) => ({ id: t.id, nombre: t.nombre, sector: t.sector?.nombre }))}
+                  tipo={filtros.tipo}
+                  onTipo={(v) => cambiarFiltro('tipo', v)}
+                  estado={filtros.estado}
+                  onEstado={(v) => cambiarFiltro('estado', v)}
+                  cronos={filtros.cronos}
+                  onCronos={(v) => cambiarFiltro('cronos', v)}
+                  sectores={sectores}
+                  sectorId={filtros.sectorId}
+                  onSector={(v) => cambiarFiltro('sectorId', v)}
+                  tecnicoId={filtros.tecnicoId}
+                  onTecnico={(v) => cambiarFiltro('tecnicoId', v)}
+                  tecnicos={tecnicos.filter((t) => t.activo).map((t) => ({ id: t.id, nombre: t.nombre, sector: t.sector?.nombre, sectorId: t.sector?.id }))}
                 />
                 <div className="cal-sub">
                   <button className={`cal-sub-btn ${subTabHistorial === 'lista' ? 'on' : ''}`} onClick={() => setSubTabHistorial('lista')}>Lista</button>
@@ -149,7 +177,15 @@ export default function AdminPage() {
                   <div className="empty">Sin movimientos para mostrar.</div>
                 ) : (
                   movimientosFiltrados.map((m) => (
-                    <MovimientoCard key={m.id} movimiento={m} mostrarTecnico onToggleCronos={toggleCronos} />
+                    <MovimientoCard
+                      key={m.id}
+                      movimiento={m}
+                      mostrarTecnico
+                      onToggleCronos={toggleCronos}
+                      acciones={m.estado === 'pendiente' ? (
+                        <AccionesPendiente onAprobar={() => aprobar(m.id)} onRechazar={(motivo) => rechazar(m.id, motivo)} />
+                      ) : undefined}
+                    />
                   ))
                 )}
               </>
@@ -160,7 +196,11 @@ export default function AdminPage() {
                 <button className="btn btn-sec" style={{ marginBottom: 12 }} onClick={() => setModalTecnico('nuevo')}>
                   + Nuevo técnico
                 </button>
-                {tecnicos.map((t) => (
+                {sectores.length > 1 && (
+                  <div className="hist-filters"><SectorPills sectores={sectores} value={sectorTecnicos} onChange={setSectorTecnicos} /></div>
+                )}
+                {tecnicosVisibles.length === 0 && <div className="empty">No hay técnicos en ese sector.</div>}
+                {tecnicosVisibles.map((t) => (
                   <div className="mv" key={t.id}>
                     <div className="mv-top">
                       <div>
@@ -222,8 +262,11 @@ export default function AdminPage() {
                     <div className="mv-top">
                       <div>
                         <div className="mv-tipo">{u.nombre}</div>
-                        <div className="mv-tec">{u.rol === 'admin' ? 'Administrador' : u.sector?.nombre}</div>
+                        <div className="mv-tec">{u.rol === 'admin' ? 'Administrador' : (u.sectores || []).map((x) => x.nombre).join(' · ') || 'Sin sector'}</div>
                       </div>
+                      {u.rol === 'encargado' && (
+                        <button className="btn btn-sec btn-sm" onClick={() => setEditandoSectores(u)}>Sectores</button>
+                      )}
                       <button
                         className="btn btn-danger btn-sm"
                         onClick={async () => {
@@ -347,12 +390,16 @@ export default function AdminPage() {
           <form onSubmit={async (e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget);
+            if (modalUsuario === 'encargado' && f.getAll('sectorIds').length === 0) {
+              toast('Elegí al menos un sector para el encargado.', 'e');
+              return;
+            }
             setEnviando(true);
             try {
               await usuariosApi.crear({
                 nombre: String(f.get('nombre')),
                 rol: modalUsuario,
-                sectorId: modalUsuario === 'encargado' ? String(f.get('sectorId')) : undefined,
+                sectorIds: modalUsuario === 'encargado' ? f.getAll('sectorIds').map(String) : undefined,
                 password: String(f.get('password')),
               });
               toast('Usuario creado.', 's');
@@ -367,11 +414,13 @@ export default function AdminPage() {
             </div>
             {modalUsuario === 'encargado' && (
               <div className="f">
-                <label>Sector a cargo</label>
-                <select name="sectorId" required defaultValue="">
-                  <option value="">Seleccionar…</option>
-                  {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
+                <label>Sectores a cargo</label>
+                <div className="chk-list">
+                  {sectores.map((s) => (
+                    <label key={s.id} className="chk-item"><input type="checkbox" name="sectorIds" value={s.id} /> {s.nombre}</label>
+                  ))}
+                </div>
+                <div className="hint">Podés elegir más de uno: el encargado va a aprobar los de todos esos sectores.</div>
               </div>
             )}
             <div className="f">
@@ -379,6 +428,37 @@ export default function AdminPage() {
               <input name="password" type="password" minLength={4} required />
             </div>
             <button className="btn btn-pri" type="submit" disabled={enviando}>Crear</button>
+          </form>
+        </Modal>
+      )}
+
+      {editandoSectores && (
+        <Modal titulo={`Sectores — ${editandoSectores.nombre}`} onClose={() => setEditandoSectores(null)}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget);
+            const sectorIds = f.getAll('sectorIds').map(String);
+            if (sectorIds.length === 0) { toast('Tiene que quedar al menos un sector.', 'e'); return; }
+            setEnviando(true);
+            try {
+              await usuariosApi.actualizar(editandoSectores.id, { sectorIds });
+              toast('Sectores actualizados.', 's');
+              setEditandoSectores(null);
+              cargarTodo();
+            } catch (err: any) { toast(err.message, 'e'); }
+            finally { setEnviando(false); }
+          }}>
+            <div className="f">
+              <label>Sectores a cargo</label>
+              <div className="chk-list">
+                {sectores.map((s) => (
+                  <label key={s.id} className="chk-item">
+                    <input type="checkbox" name="sectorIds" value={s.id} defaultChecked={(editandoSectores.sectores || []).some((x) => x.id === s.id)} /> {s.nombre}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button className="btn btn-pri" type="submit" disabled={enviando}>Guardar</button>
           </form>
         </Modal>
       )}

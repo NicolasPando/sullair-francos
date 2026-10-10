@@ -4,13 +4,14 @@ import { JwtModule } from '@nestjs/jwt';
 import { Movimiento } from './movimiento.entity';
 import { Tecnico } from '../tecnicos/tecnico.entity';
 import { Sector } from '../entities/sector.entity';
+import { Usuario } from '../usuarios/entities/usuario.entity';
 import { MovimientosController } from './movimientos.controller';
 import { MovimientosService } from './movimientos.service';
 import { MovimientosRepository } from './movimientos.repository';
 import { TecnicosRepository } from '../tecnicos/tecnicos.repository';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Movimiento, Tecnico, Sector]), JwtModule],
+  imports: [TypeOrmModule.forFeature([Movimiento, Tecnico, Sector, Usuario]), JwtModule],
   controllers: [MovimientosController],
   providers: [MovimientosService, MovimientosRepository, TecnicosRepository],
 })

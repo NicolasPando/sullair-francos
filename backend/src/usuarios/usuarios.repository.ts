@@ -1,6 +1,6 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Usuario } from './entities/usuario.entity';
 import { Sector } from '../entities/sector.entity';
@@ -9,22 +9,44 @@ import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 
 @Injectable()
-export class UsuariosRepository {
+export class UsuariosRepository implements OnModuleInit {
+  private readonly logger = new Logger(UsuariosRepository.name);
+
   constructor(
     @InjectRepository(Usuario) private readonly usuarioRepository: Repository<Usuario>,
     @InjectRepository(Sector) private readonly sectorRepository: Repository<Sector>,
   ) {}
 
+  // Migracion de datos (idempotente): los encargados que tenian un unico `sector` (modelo anterior)
+  // pasan a tenerlo tambien en `sectores`. Si ya tienen sectores asignados no se toca nada.
+  async onModuleInit() {
+    const encargados = await this.usuarioRepository.find({ where: { rol: RolesEnum.ENCARGADO } });
+    for (const e of encargados) {
+      if (e.sector && (!e.sectores || e.sectores.length === 0)) {
+        e.sectores = [e.sector];
+        await this.usuarioRepository.save(e);
+        this.logger.log(`Encargado "${e.nombre}": sector "${e.sector.nombre}" migrado a sectores`);
+      }
+    }
+  }
+
   findAll(rol?: RolesEnum.ADMIN | RolesEnum.ENCARGADO) {
     return this.usuarioRepository.find({ where: rol ? { rol } : {}, order: { nombre: 'ASC' } });
   }
 
+  // Valida que existan todos los sectores pedidos y los devuelve
+  private async buscarSectores(sectorIds: string[]): Promise<Sector[]> {
+    const unicos = [...new Set(sectorIds)];
+    const sectores = await this.sectorRepository.find({ where: { id: In(unicos) } });
+    if (sectores.length !== unicos.length) throw new NotFoundException('Algun sector no existe');
+    return sectores;
+  }
+
   async create(dto: CreateUsuarioDto) {
-    let sector: Sector | null = null;
+    let sectores: Sector[] = [];
     if (dto.rol === RolesEnum.ENCARGADO) {
-      if (!dto.sectorId) throw new BadRequestException('El encargado necesita un sector');
-      sector = await this.sectorRepository.findOne({ where: { id: dto.sectorId } });
-      if (!sector) throw new NotFoundException('Sector no encontrado');
+      if (!dto.sectorIds?.length) throw new BadRequestException('El encargado necesita al menos un sector');
+      sectores = await this.buscarSectores(dto.sectorIds);
     }
 
     const nombreExistente = await this.usuarioRepository.findOne({ where: { nombre: dto.nombre.trim() } });
@@ -32,7 +54,13 @@ export class UsuariosRepository {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
     return this.usuarioRepository.save(
-      this.usuarioRepository.create({ nombre: dto.nombre, rol: dto.rol, sector, passwordHash }),
+      this.usuarioRepository.create({
+        nombre: dto.nombre,
+        rol: dto.rol,
+        sectores,
+        sector: sectores[0] ?? null, // columna deprecada, se mantiene sincronizada con el primer sector
+        passwordHash,
+      }),
     );
   }
 
@@ -41,10 +69,10 @@ export class UsuariosRepository {
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
 
     if (dto.nombre) usuario.nombre = dto.nombre;
-    if (dto.sectorId) {
-      const sector = await this.sectorRepository.findOne({ where: { id: dto.sectorId } });
-      if (!sector) throw new NotFoundException('Sector no encontrado');
-      usuario.sector = sector;
+    if (dto.sectorIds && usuario.rol === RolesEnum.ENCARGADO) {
+      if (dto.sectorIds.length === 0) throw new BadRequestException('El encargado necesita al menos un sector');
+      usuario.sectores = await this.buscarSectores(dto.sectorIds);
+      usuario.sector = usuario.sectores[0];
     }
     if (dto.password) usuario.passwordHash = await bcrypt.hash(dto.password, 10);
 

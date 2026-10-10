@@ -1,13 +1,15 @@
 'use client';
 
 import { Movimiento } from '@/lib/types';
+import { aplicaCronos } from '@/lib/filtros';
 
+// Resumen de lo que falta / ya esta cargado en Cronos (solo francos solicitados y guardias aprobados)
 export default function CronosChip({ movimientos }: { movimientos: Movimiento[] }) {
-  const aprobados = movimientos.filter((m) => m.estado === 'aprobado');
-  if (!aprobados.length) return null;
+  const aplicables = movimientos.filter(aplicaCronos);
+  if (!aplicables.length) return null;
 
-  const pendientes = aprobados.filter((m) => !m.cronos).length;
-  const cargados = aprobados.filter((m) => m.cronos).length;
+  const pendientes = aplicables.filter((m) => !m.cronos).length;
+  const cargados = aplicables.filter((m) => m.cronos).length;
 
   return (
     <div>

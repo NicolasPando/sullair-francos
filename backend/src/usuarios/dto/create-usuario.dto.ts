@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 import { RolesEnum } from './../entities/roles.enum';
 
 export class CreateUsuarioDto {
@@ -12,10 +12,11 @@ export class CreateUsuarioDto {
   @IsEnum(RolesEnum)
   rol: RolesEnum.ADMIN | RolesEnum.ENCARGADO;
 
-  @ApiProperty({ description: 'Requerido si el rol es encargado', required: false })
+  @ApiProperty({ description: 'Sectores a cargo. Requerido (al menos uno) si el rol es encargado', required: false, type: [String] })
   @IsOptional()
-  @IsUUID()
-  sectorId?: string;
+  @IsArray()
+  @IsUUID('all', { each: true })
+  sectorIds?: string[];
 
   @ApiProperty()
   @IsString()

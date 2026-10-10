@@ -32,7 +32,7 @@ async function seed() {
   await usuariosRepository.create({
     nombre: 'Laura Sosa',
     rol: RolesEnum.ENCARGADO,
-    sectorId: altura.id,
+    sectorIds: [altura.id],
     password: 'encargada1234',
   });
 

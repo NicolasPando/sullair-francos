@@ -75,9 +75,9 @@ export const tecnicosApi = {
 
 export const usuariosApi = {
   listar: (rol?: 'admin' | 'encargado') => apiFetch<Usuario[]>(`/usuarios${rol ? `?rol=${rol}` : ''}`),
-  crear: (data: { nombre: string; rol: 'admin' | 'encargado'; sectorId?: string; password: string }) =>
+  crear: (data: { nombre: string; rol: 'admin' | 'encargado'; sectorIds?: string[]; password: string }) =>
     apiFetch<Usuario>('/usuarios', { method: 'POST', body: JSON.stringify(data) }),
-  actualizar: (id: string, data: Partial<{ nombre: string; sectorId: string; password: string }>) =>
+  actualizar: (id: string, data: Partial<{ nombre: string; sectorIds: string[]; password: string }>) =>
     apiFetch<Usuario>(`/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   eliminar: (id: string) => apiFetch(`/usuarios/${id}`, { method: 'DELETE' }),
 };
